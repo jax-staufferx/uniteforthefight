@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Method: how every number is made</title>
+<meta name="description" content="The exact recipe behind every dollar figure on this site."><meta name="theme-color" content="#0b0b0c">
+<link rel="canonical" href="https://uniteforthefight.us/sources/method/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="United for the Fight">
+<meta property="og:title" content="Method: how every number is made">
+<meta property="og:description" content="The exact recipe behind every dollar figure on this site."><meta property="og:url" content="https://uniteforthefight.us/sources/method/">
+<meta property="og:image" content="https://uniteforthefight.us/assets/og/home.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=9bb01f415e">
+<script src="/assets/site.js?v=9bb01f415e" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="mark" href="/"><b>#</b>UniteForTheFight</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/states/">States</a>
+      <a href="/senate-2026/">2026 Senate races</a>
+      <a href="/house-2026/">2026 House races</a>
+      <a href="/senators/">All senators</a>
+      <a href="/protests/">Protests</a>
+      <a href="/act/">Act</a>
+      <a href="/sources/">Sources</a>
+    </nav>
+  </div>
+</header>
+<main id="main" tabindex="-1">
+<header class="page-head"><div class="wrap"><p class="crumbs"><a href="/sources/">How we source this</a> / Method</p><h1>Method</h1><p class="sub">The exact recipe behind every dollar figure, written for anyone who wants to check it.</p></div></header>
+<section class="sec"><div class="wrap prose method"><h1>How every number is made</h1>
+<p>Plain-language version on the site at <code>/sources/</code>. This file is the exact recipe. Everything here is public data.</p>
+<h2>The two committees</h2>
+<table>
+<thead>
+<tr>
+<th>Committee</th>
+<th>FEC ID</th>
+<th>What it is</th>
+<th>First filed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>American Israel Public Affairs Committee Political Action Committee ("AIPAC PAC")</td>
+<td><a href="https://www.fec.gov/data/committee/C00797670/">C00797670</a></td>
+<td>AIPAC's PAC. Gives directly to candidates, and acts as a conduit for contributions individuals earmark for candidates. FEC type: PAC, qualified; lobbyist/registrant PAC.</td>
+<td>2021-12-15</td>
+</tr>
+<tr>
+<td>United Democracy Project ("UDP")</td>
+<td><a href="https://www.fec.gov/data/committee/C00799031/">C00799031</a></td>
+<td>AIPAC's super PAC. Spends independently for or against candidates (independent expenditures). FEC type: Super PAC (independent expenditure-only).</td>
+<td>2022-01-03</td>
+</tr>
+</tbody>
+</table>
+<p>Both IDs were looked up through the FEC's committee search (<code>/v1/committees/?q=…</code>) on 2026-10-18. The names on the
+site are the names in the filings. The money is American by law (foreign nationals may not contribute or spend in
+US elections), so the site never calls it "Israeli" (U-6, U-D4).</p>
+<h2>Where the rows come from</h2>
+<ol>
+<li><strong>The filing list.</strong> <code>GET https://api.open.fec.gov/v1/committee/&lt;ID&gt;/filings/?per_page=100&amp;sort=-receipt_date</code>
+   (paged), for both committees. Kept: every filing the FEC marks <code>most_recent</code> (so an amended report replaces its
+   original) with form type <strong>F3X</strong> (periodic report) for AIPAC PAC, and <strong>F3X</strong> plus <strong>F24</strong> (24- and 48-hour
+   independent-expenditure notices) for UDP.</li>
+<li><strong>The filings themselves.</strong> Each kept filing is read in full from its electronic original,
+   <code>https://docquery.fec.gov/dcdev/posted/&lt;file number&gt;.fec</code>, the exact file the committee submitted. No API key is
+   needed for these, and they never change once filed, so each is downloaded once.</li>
+<li><strong>The rows</strong> (<code>pipeline/fec_money.py</code>, parsed with the <code>fecfile</code> library):</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Figure</th>
+<th>Rows</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AIPAC PAC direct</strong></td>
+<td>AIPAC PAC Schedule B, line 23 (contributions to federal candidates and committees)</td>
+<td>Rows that are not earmarks (below). Minus Schedule A line 16 rows (refunds the candidate's committee sent back to AIPAC PAC). Who each row counts for: see "Who a row counts for".</td>
+</tr>
+<tr>
+<td><strong>AIPAC PAC earmarked</strong></td>
+<td>AIPAC PAC Schedule B, line 23</td>
+<td>Rows whose purpose or memo text matches <code>earmark|(?&lt;![a-z])ermk</code> (case ignored): "Earmark of <donor>", and re-sent earmarks AIPAC PAC writes as "ERMK: <donor> - Originally forwarded ...". Every non-memo line 23 purpose was surveyed on 2026-10-18; AIPAC PAC uses no other abbreviation. Money an individual gave through AIPAC PAC, which AIPAC PAC forwarded to the candidate's committee. Gross amount forwarded; refunds of earmarks to donors (line 28A) are not subtracted.</td>
+</tr>
+<tr>
+<td><strong>AIPAC PAC, to a joint fundraising committee</strong></td>
+<td>AIPAC PAC Schedule B, line 23</td>
+<td>Rows paid to a committee the FEC designates J (joint fundraising), which splits its money among several committees. Not counted as money to the candidate; shown on its own line beside the candidate the row names (Jeffries Victory Fund) or, where the row names none, the candidate the committee is for (Susan Collins for Maine, set by hand in <code>JFC_OWNER</code>).</td>
+</tr>
+<tr>
+<td><strong>UDP supporting</strong></td>
+<td>UDP Schedule E (independent expenditures)</td>
+<td>Support/oppose indicator <code>S</code>. Attributed to the candidate ID on the row.</td>
+</tr>
+<tr>
+<td><strong>UDP opposing</strong></td>
+<td>UDP Schedule E</td>
+<td>Support/oppose indicator <code>O</code>.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Memo rows</strong> (memo code <code>X</code>) itemise detail of another row and are skipped, so nothing is counted twice.</li>
+<li><strong>24/48-hour notices vs periodic reports.</strong> A UDP periodic report (F3X) lists every expenditure in its period,
+  including those already announced in 24/48-hour notices. So notice rows are used only for expenditures dated after
+  the end of UDP's latest periodic report, and each transaction once.</li>
+<li><strong>Blank candidate IDs.</strong> 96 UDP rows from 2022 name the candidate but leave the ID blank. They are matched to the
+  FEC candidate master files (<code>cn22</code>, <code>cn24</code>, <code>cn26</code>) by office, state, district and name, and used only when exactly
+  one candidate fits (all 96 matched; the rows carry <code>by_name: true</code>).</li>
+<li><strong>Dates and cycles.</strong> A row's date is the expenditure date (UDP: dissemination date where given). The <strong>2026
+  cycle</strong> is 2025-01-01 to 2026-12-31. <strong>Career</strong> is everything since each committee began filing (AIPAC PAC
+  December 2021, UDP January 2022), so no figure implies giving before AIPAC PAC existed.</li>
+</ul>
+<h2>Who a row counts for (<code>pipeline/totals.py</code>, fact check W1-W8, M2)</h2>
+<ul>
+<li><strong>UDP rows:</strong> the candidate the expenditure names.</li>
+<li><strong>AIPAC PAC rows:</strong> the candidate ID AIPAC PAC typed on the row, <strong>if</strong> the FEC's candidate-committee linkage files
+  (<code>ccl22/24/26</code>) tie that ID to the committee the money was paid to, or the committee has no links. If the ID
+  isn't tied to the recipient committee, the row counts for the candidate(s) that committee is a principal or
+  authorized committee (designation P or A) for. Example: 307 rows paid to Pete Ricketts for Senate (C00832436)
+  carry ID S4NE00173, which is in no FEC candidate file; the linkage file ties the committee to S6NE00129, his ID.</li>
+<li><strong>Joint fundraising committees</strong> (designation J in the committee master <code>cm22/24/26</code>): their own figure, above.</li>
+<li>A row counted for two of one person's IDs counts once.</li>
+</ul>
+<h2>Which cycle a row counts in (<code>pipeline/fec_money.py</code>, fact check M1)</h2>
+<ul>
+<li>Its own date, except a <strong>negative row</strong> (a refund, or a VOID cancelling an earlier check), which counts in the
+  cycle of what it reverses: a date written in its description ("Refund of contribution made 02/15/2022"); else a
+  year written in it ("Refund of General 2024 Contribution"); else the latest earlier gift of the same kind and
+  amount to the same committee (AIPAC PAC) or about the same candidate (UDP); else the latest earlier gift of that
+  kind there; else its own date. A refund in 2026 of a 2022 gift no longer pulls a 2026 figure below zero.</li>
+<li><strong>No figure is ever shown negative.</strong> Where refunds bring a figure to $0, it reads "$0 (net of $X refunded)".
+  After this rule, no figure in the data is negative; <code>tools/test_money_fixes.py</code> fails if one ever is.</li>
+</ul>
+<h2>From rows to a person (<code>pipeline/people.py</code>, <code>pipeline/totals.py</code>)</h2>
+<p>Each person's figure is the sum over <strong>every FEC candidate ID they have filed under</strong>, House and Senate:
+- sitting senators: the FEC IDs in the congress-legislators dataset (public domain, unitedstates.github.io);
+- 2026 candidates: those IDs, plus the FEC candidate master files matched by state, office and name; five people
+  file under another form of their name and were matched by hand (Hinson as "Arenholz", Rogers as "Michael J",
+  Tache as "Joseph", Flanagan as "Margaret", Fetty Anderson as "Rachel Lee"; see <code>FEC_EXTRA</code> in people.py).</p>
+<h2>The House (<code>pipeline/house.py</code>)</h2>
+<ul>
+<li>
+<p><strong>Merging FEC IDs (fact check K1):</strong> two or more FEC IDs found by name are merged into one person only when each
+  was filed for the same district as the 2026 race; anything else needs a hand check (<code>FEC_HOUSE</code>). This unmerged
+  three different Florida Davises and two California Smiths. A single matching ID is kept. IDs a person's own
+  records leave out are added by hand in <code>FEC_ADD</code> (Tom Kean Jr.'s 2006 Senate ID, S6NJ00271).</p>
+</li>
+<li>
+<p><strong>Who is on the ballot:</strong> <code>data/house/&lt;ST&gt;.yaml</code>, every candidate on each state's certified 2026 general-election
+  ballot for U.S. House (not write-ins). Each name is copied exactly as the source prints it, and
+  <code>tools/verify_house.py</code> fetches the source and fails unless every name is on it and the state has its full
+  number of districts. Sources are the state election office's list, or the House Clerk's compilation of
+  nominees from official sources (Oct 8, 2026), or an established news report where neither could be read.</p>
+</li>
+<li><strong>Cross-check:</strong> <code>tools/check_house_clerk.py</code> compares every district with the House Clerk's list. Each
+  difference is explained in <code>docs/house-clerk-check.md</code>.</li>
+<li><strong>FEC IDs:</strong> a sitting member's own IDs from congress-legislators; otherwise FEC House records in the same state
+  whose last name matches exactly and whose first name, middle name or listed nickname matches (with common
+  nicknames: Bob for Robert, Jim for James and so on). One person often has an ID per cycle under slightly
+  different spellings; all are counted, and any such merged match that carries money is listed for a hand check
+  (none does). A few are set by hand (<code>FEC_HOUSE</code> in house.py). A candidate with no FEC record is shown as having
+  none: every 2026-cycle row that names no candidate is money to a party or caucus committee.</li>
+<li><strong>Money:</strong> the same four figures, from the same rows, recomputed by the same independent check.</li>
+<li><strong>District lines:</strong> races are listed by the 2026 districts on the ballot. Several states use new lines in 2026;
+  each state's page says so, with a source. The ZIP lookup for calling uses the current (119th Congress)
+  districts, because a caller reaches today's member, elected on today's lines (Census ZCTA-to-119th-Congress
+  relationship file; a ZIP crossing districts offers each district's member).</li>
+</ul>
+<h2>Odds of winning (<code>pipeline/odds.py</code>)</h2>
+<ul>
+<li><strong>Source:</strong> Kalshi's public, read-only market data (api.elections.kalshi.com), fetched once a day. House:
+  series <code>KXHOUSERACE</code>, one market per candidate or party per district. Senate: <code>SENATE&lt;ST&gt;</code>, <code>KXSENATE&lt;ST&gt;</code> and
+  <code>KX&lt;ST&gt;SENATE</code>, plus <code>SENATEOHS</code> and <code>SENATEFLS</code> for the specials. Only 2026 general-election markets are kept.</li>
+<li><strong>Matching:</strong> a market's subtitle names the candidate; it is matched to a candidate in the same race by last name
+  and first name or nickname. A market named only "Democratic party" or "Republican party" goes to that party's
+  nominee where the race has exactly one. Senate markets are placed by the state their own title or rules name
+  (Kalshi files Kentucky's under a Louisiana series). Where a person has two markets, the busier one is used.</li>
+<li><strong>The figure:</strong> the midpoint of the best yes bid and ask, else the last trade, shown as a percentage (half-up,
+  from the price to 4 places), "under 1%" and "over 99%" at the ends. Nothing is shown without a price.</li>
+<li><strong>Check:</strong> <code>tools/verify_odds.py</code> recomputes every figure from the saved raw data (<code>data/odds-raw.json.gz</code>) with
+  separate code, confirms each market names the same person in the same district, and finds the figure on the
+  built pages. The daily job guards the fetch like the others: a failed or shrunken fetch keeps the last good data.</li>
+<li><strong>What it is not:</strong> a poll, a forecast or our opinion. It's what traders are willing to pay, and it can be wrong.</li>
+</ul>
+<h2>How current it is</h2>
+<ul>
+<li>AIPAC PAC: monthly reports. The latest covers <strong>through 2026-08-31</strong> (filed 2026-09-19). The September report is
+  due 2026-10-20; the daily job picks it up.</li>
+<li>UDP: monthly reports through <strong>2026-08-31</strong>, plus 24/48-hour notices <strong>through 2026-10-16</strong>.</li>
+<li>Every money section on the site shows these dates.</li>
+</ul>
+<h2>Checks</h2>
+<ul>
+<li><strong>Recompute</strong> (<code>tools/verify_money.py</code>): rebuilds every published figure (1,384 of them: 4 measures × cycle and
+  career × 173 people) straight from the raw <code>.fec</code> files with separate code (plain FEC format field positions, no
+  <code>fecfile</code>), and must match to the cent. Proven able to fail: changing one published total by $1 fails it.</li>
+<li><strong>Against FEC's processed data:</strong> UDP's 2026 totals per candidate match the FEC bulk independent-expenditure file
+  (<code>independent_expenditure_2026.csv</code>) within 0.4%; the gap is notices FEC had not processed yet. FEC's processed
+  "committee contributions" bulk file (<code>pas226</code>) is <em>not</em> a usable yardstick for AIPAC PAC: it codes many of AIPAC
+  PAC's amended earmark rows as direct contributions (transaction type 24K), e.g. 70,724 dollars of "direct"
+  contributions to one House candidate, far over the legal limit for a direct contribution. The filings' own wording
+  ("Earmark of …") is used instead.</li>
+<li><strong>Against OpenSecrets</strong> (required five-candidate cross-check): <strong>not completed in the build session.</strong>
+  opensecrets.org refuses scripts (HTTP 403) and shows a bot check in a browser, which this build does not try to get
+  past. The five figures to compare, with the OpenSecrets pages to read by hand, are in <code>docs/opensecrets-check.md</code>.
+  Expected differences, written down before the comparison: OpenSecrets reports AIPAC money as "PAC" plus
+  "individuals" (bundled), groups giving by cycle, may count earmarks from the recipient's side (their Schedule A
+  memo entries naming AIPAC PAC as conduit) rather than AIPAC PAC's own Schedule B, and updates on its own schedule.</li>
+</ul>
+<h2>Limits, said plainly</h2>
+<ul>
+<li>These figures cover AIPAC PAC and UDP only (U-D4). Other pro-Israel PACs and individual donors who don't route
+  through AIPAC PAC are not counted.</li>
+<li>"Direct" money goes to a candidate's committee, which may have been for an earlier House race; each person's rows
+  page shows which committee received each contribution.</li>
+<li>The FEC's own website search (linked beside each figure) shows processed data, which can lag the filings by weeks.</li>
+</ul></div></section>
+</main>
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <h2>Can't find a number?</h2>
+        <p>The U.S. Capitol Switchboard connects you to any senator's or representative's office.</p>
+        <p><a class="switch" href="tel:+12022243121">(202) 224-3121</a></p>
+        <p class="src">Source: <a href="https://www.senate.gov/senators/senators-contact.htm">senate.gov</a></p>
+      </div>
+      <div>
+        <h2>On this site</h2>
+        <ul>
+          <li><a href="/states/">Find your state</a></li>
+          <li><a href="/senate-2026/">2026 Senate races</a></li>
+          <li><a href="/house-2026/">2026 House races</a></li>
+          <li><a href="/senators/">All 100 senators</a></li>
+          <li><a href="/protests/">Upcoming protests</a></li>
+          <li><a href="/act/">Register, check dates, share</a></li>
+          <li><a href="/sources/">How we source this</a></li>
+          <li><a href="/about/">About</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Corrections</h2>
+        <p>See something wrong? DM <a href="https://www.instagram.com/radicaljax/">@radicaljax on Instagram</a> with the page and what's off.</p>
+        <p style="margin-top:.75rem">Independent. Not affiliated with any campaign, party or PAC.</p>
+      </div>
+    </div>
+    <div class="fine">
+      <span>Money: FEC filings through August 31, 2026 (AIPAC PAC) and October 16, 2026 (UDP). Updated October 18, 2026, 8:24 p.m. ET.</span>
+      <span>No cookies, no trackers. ZIP searches stay in your browser.</span>
+    </div>
+  </div>
+</footer>
+<nav class="quick" aria-label="Quick actions">
+  <a href="/states/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Your state</a>
+  <a href="/act/#call" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/></svg>Call</a>
+  <a href="/protests/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>Protests</a>
+</nav>
+</body>
+</html>
